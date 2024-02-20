@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"net"
 
 	"gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/webtunnel/transport/httpupgrade"
@@ -9,7 +10,7 @@ import (
 )
 
 type ClientConfig struct {
-	RemoteAddress string
+	RemoteAddresses []string
 
 	Path          string
 	TLSKind       string
@@ -26,10 +27,13 @@ func NewWebTunnelClientTransport(config *ClientConfig) (Transport, error) {
 
 func (t Transport) Dial() (net.Conn, error) {
 	var conn net.Conn
-	if tcpConn, err := net.Dial("tcp", t.config.RemoteAddress); err != nil {
-		return nil, err
-	} else {
-		conn = tcpConn
+	for _, addr := range t.config.RemoteAddresses {
+		if tcpConn, err := net.Dial("tcp", addr); err == nil {
+			conn = tcpConn
+		}
+	}
+	if conn == nil {
+		return nil, fmt.Errorf("Can't connect to %v", t.config.RemoteAddresses)
 	}
 	if t.config.TLSKind != "" {
 		conf := &tls.Config{ServerName: t.config.TLSServerName}

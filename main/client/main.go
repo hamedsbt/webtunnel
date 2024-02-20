@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
@@ -9,7 +10,6 @@ import (
 	"os"
 	"os/signal"
 	"strings"
-
 	"sync"
 	"syscall"
 
@@ -125,11 +125,14 @@ func socksAcceptLoop(ln *pt.SocksListener, shutdown chan struct{}, wg *sync.Wait
 					if port == "" {
 						port = defaultPort
 					}
-					config.RemoteAddress = url.Hostname() + ":" + port
-				}
 
-				if remoteAddress, ok := conn.Req.Args.Get("addr"); ok {
-					config.RemoteAddress = remoteAddress
+					config.RemoteAddresses, err = getAddressesFromHostname(url.Hostname(), port)
+					if err != nil {
+						log.Println(err)
+						conn.Reject()
+						return
+					}
+					config.TLSServerName = url.Hostname()
 				}
 
 				if tlsServerName, ok := conn.Req.Args.Get("servername"); ok {
@@ -183,4 +186,24 @@ func copyLoop(socks, sfconn io.ReadWriter) {
 	}()
 	<-done
 	log.Println("copy loop ended")
+}
+
+func getAddressesFromHostname(hostname, port string) ([]string, error) {
+	addresses := []string{}
+	addr, err := net.LookupHost(hostname)
+	if err != nil {
+		return addresses, fmt.Errorf("Lookup error for host %s: %v", hostname, err)
+	}
+
+	for _, a := range addr {
+		ip := net.ParseIP(a)
+		if ip == nil || ip.IsLoopback() || ip.IsUnspecified() || ip.IsMulticast() || ip.IsLinkLocalUnicast() || ip.IsPrivate() {
+			continue
+		}
+		addresses = append(addresses, a+":"+port)
+	}
+	if len(addresses) == 0 {
+		return addresses, fmt.Errorf("Could not find any valid IP for %s", hostname)
+	}
+	return addresses, nil
 }
