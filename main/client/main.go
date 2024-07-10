@@ -14,6 +14,7 @@ import (
 	"syscall"
 
 	pt "gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/goptlib"
+	"gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/webtunnel"
 )
 
 func main() {
@@ -25,6 +26,8 @@ func main() {
 		pt.ProxyError("proxy is not supported")
 		os.Exit(1)
 	}
+	pt.ReportVersion("webtunnel", webtunnel.Version)
+
 	listeners := make([]net.Listener, 0)
 	shutdown := make(chan struct{})
 	var wg sync.WaitGroup
