@@ -142,6 +142,10 @@ func socksAcceptLoop(ln *pt.SocksListener, shutdown chan struct{}, wg *sync.Wait
 					config.TLSServerName = tlsServerName
 				}
 
+				if approvedCert, ok := conn.Req.Args.Get("approvedCert"); ok {
+					config.ApprovedCert = approvedCert
+				}
+
 				transport, err := NewWebTunnelClientTransport(&config)
 				if err != nil {
 					log.Printf("transport error: %s", err)

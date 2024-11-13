@@ -18,7 +18,8 @@ type Config struct {
 }
 
 func NewTLSTransport(config *Config) (Transport, error) {
-	return Transport{kind: "tls", serverName: config.ServerName}, nil
+	return Transport{kind: "tls", serverName: config.ServerName,
+		allowInsecure: config.AllowInsecure, pinnedPeerCertificateChainSha256: config.PinnedPeerCertificateChainSha256}, nil
 }
 
 type Transport struct {

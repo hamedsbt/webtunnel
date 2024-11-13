@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"fmt"
 	"net"
 
@@ -15,6 +16,8 @@ type ClientConfig struct {
 	Path          string
 	TLSKind       string
 	TLSServerName string
+
+	ApprovedCert string
 }
 
 type Transport struct {
@@ -38,6 +41,14 @@ func (t Transport) Dial() (net.Conn, error) {
 	}
 	if t.config.TLSKind != "" {
 		conf := &tls.Config{ServerName: t.config.TLSServerName}
+		if t.config.ApprovedCert != "" {
+			conf.AllowInsecure = true
+			decodedCert, err := base64.StdEncoding.DecodeString(t.config.ApprovedCert)
+			if err != nil {
+				return nil, fmt.Errorf("failed to decode approved certificate chain hash : %v", err)
+			}
+			conf.PinnedPeerCertificateChainSha256 = append(conf.PinnedPeerCertificateChainSha256, decodedCert)
+		}
 		if tlsTransport, err := tls.NewTLSTransport(conf); err != nil {
 			return nil, err
 		} else {
