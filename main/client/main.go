@@ -142,7 +142,7 @@ func socksAcceptLoop(ln *pt.SocksListener, shutdown chan struct{}, wg *sync.Wait
 					config.TLSServerName = tlsServerName
 				}
 
-				if approvedCert, ok := conn.Req.Args.Get("approvedCert"); ok {
+				if approvedCert, ok := conn.Req.Args.Get("cert"); ok {
 					config.ApprovedCert = approvedCert
 				}
 
