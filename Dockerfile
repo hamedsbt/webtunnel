@@ -1,4 +1,4 @@
-FROM golang:1.20-bullseye as builder
+FROM golang:1.24-bookworm as builder
 
 ADD . /webtunnel
 
@@ -8,7 +8,7 @@ WORKDIR /webtunnel
 
 RUN go build -ldflags="-s -w" -o "build/server" gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/webtunnel/main/server
 
-FROM debian:bullseye-slim
+FROM containers.torproject.org/tpo/tpa/base-images/debian:bookworm
 
 COPY --from=builder /webtunnel/build/server /usr/bin/webtunnel-server
 
@@ -25,7 +25,7 @@ RUN apt-get update && apt-get install -y \
 RUN curl https://deb.torproject.org/torproject.org/A3C4F0F979CAA22CDBA8F512EE8CBC9E886DDD89.asc | gpg --import
 RUN gpg --export A3C4F0F979CAA22CDBA8F512EE8CBC9E886DDD89 | apt-key add -
 
-RUN printf "deb https://deb.torproject.org/torproject.org bullseye main\n" >> /etc/apt/sources.list.d/tor.list
+RUN printf "deb https://deb.torproject.org/torproject.org bookworm main\n" >> /etc/apt/sources.list.d/tor.list
 
 # Install remaining dependencies.
 RUN apt-get update && apt-get install -y \
