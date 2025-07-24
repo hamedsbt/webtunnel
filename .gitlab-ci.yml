@@ -4,7 +4,7 @@ stages:
   - container
 
 unit_test:
-  image: golang:1.18-bullseye
+  image: golang:1.24-bullseye
   stage: test
   variables:
     GOARCH: amd64
@@ -20,7 +20,7 @@ unit_test_arm64:
     - arm64
 
 build_amd64_linux:
-  image: golang:1.18-bullseye
+  image: golang:1.24-bullseye
   stage: build
   variables:
     GOARCH: amd64
