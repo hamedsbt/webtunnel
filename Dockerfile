@@ -1,4 +1,4 @@
-FROM golang:1.24-bullseye as builder
+FROM golang:1.20-bullseye as builder
 
 ADD . /webtunnel
 
