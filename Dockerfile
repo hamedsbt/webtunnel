@@ -1,4 +1,4 @@
-FROM golang:1.24-bookworm as builder
+FROM golang:1.24-bullseye as builder
 
 ADD . /webtunnel
 
@@ -8,7 +8,7 @@ WORKDIR /webtunnel
 
 RUN go build -ldflags="-s -w" -o "build/server" gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/webtunnel/main/server
 
-FROM containers.torproject.org/tpo/tpa/base-images/debian:bookworm
+FROM debian:bullseye-slim
 
 COPY --from=builder /webtunnel/build/server /usr/bin/webtunnel-server
 

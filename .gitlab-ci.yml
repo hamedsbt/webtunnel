@@ -12,7 +12,7 @@ stages:
   - container
 
 unit_test:
-  image: ${DOCKER_REGISTRY_URL}/golang:1.24-bookworm
+  image: ${DOCKER_REGISTRY_URL}/golang:1.24-bullseye
   stage: test
   variables:
     GOARCH: amd64
@@ -28,7 +28,7 @@ unit_test_arm64:
     - arm64
 
 build_amd64_linux:
-  image: ${DOCKER_REGISTRY_URL}/golang:1.24-bookworm
+  image: ${DOCKER_REGISTRY_URL}/golang:1.24-bullseye
   stage: build
   variables:
     GOARCH: amd64
