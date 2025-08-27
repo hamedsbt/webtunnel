@@ -14,6 +14,7 @@ COPY --from=builder /webtunnel/build/server /usr/bin/webtunnel-server
 
 # Install dependencies to add Tor's repository.
 RUN apt-get update && apt-get install -y \
+    sudo \
     curl \
     gpg \
     gpg-agent \
@@ -43,6 +44,11 @@ RUN chown debian-tor:debian-tor /var/log/tor
 
 ADD release/container/start-tor.sh /usr/local/bin
 RUN chmod 0755 /usr/local/bin/start-tor.sh
+
+# !!! This is a sudo setuid binary, CHANGE IT WITH CAUTION.
+ADD release/container/chown-states.sh /usr/local/bin
+RUN chmod 0755 /usr/local/bin/chown-states.sh
+RUN echo "debian-tor ALL=(ALL) NOPASSWD: sha256:43f867a3d7e57679d64452beae97c5f9a4b0b314a89f38d57b0a183a6e3abfb6 /usr/local/bin/chown-states.sh" > /etc/sudoers.d/allow-chown-volume
 
 ADD release/container/get-bridge-line.sh /usr/local/bin
 RUN chmod 0755 /usr/local/bin/get-bridge-line.sh
