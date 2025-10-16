@@ -1,5 +1,8 @@
 variables:
   DOCKER_REGISTRY_URL: docker.io
+  STORAGE_DRIVER: vfs
+  BUILDAH_FORMAT: docker
+  FQ_IMAGE_NAME: "docker.io/thetorproject/webtunnel-bridge"
 
 stages:
   - test
@@ -45,17 +48,26 @@ build_arm64_linux:
     paths:
       - build/arm64-linux/
 
-build-server-container:
+build_server_container_amd_64:
   stage: container
   image: quay.io/buildah/stable
-  variables:
-    STORAGE_DRIVER: vfs
-    BUILDAH_FORMAT: docker
-    FQ_IMAGE_NAME: "${DOCKER_REGISTRY_URL}/thetorproject/webtunnel-bridge"
   script:
-    - buildah build -t $FQ_IMAGE_NAME
+    - buildah build --platform=linux/amd64 -t ${FQ_IMAGE_NAME}:amd64
     - mkdir -p container_image
-    - buildah push $FQ_IMAGE_NAME docker-archive:container_image/webtunnel-server.tar
+    - buildah push ${FQ_IMAGE_NAME}:amd64 docker-archive:container_image/webtunnel-server-amd64.tar
   artifacts:
     paths:
-      - container_image/webtunnel-server.tar
+      - container_image/webtunnel-server-amd64.tar
+
+build_server_container_arm_64:
+  stage: container
+  image: quay.io/buildah/stable
+  script:
+    - buildah build --platform=linux/arm64/v8 -t ${FQ_IMAGE_NAME}:arm64
+    - mkdir -p container_image
+    - buildah push ${FQ_IMAGE_NAME}:arm64 docker-archive:container_image/webtunnel-server-arm64.tar
+  artifacts:
+    paths:
+      - container_image/webtunnel-server-arm64.tar
+  tags:
+    - arm64
