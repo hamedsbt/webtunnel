@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
 
-sudo /usr/local/bin/chown-states.sh
-
 NICK=${NICKNAME:-WebTunnelBr}
 
 echo "Using NICKNAME=${NICK}, OR_PORT=${OR_PORT}, PT_PORT=${PT_PORT}, and EMAIL=${EMAIL}."
