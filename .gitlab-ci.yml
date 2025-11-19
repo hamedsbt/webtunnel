@@ -47,15 +47,15 @@ build_arm64_linux:
 
 build-server-container:
   stage: container
-  image: quay.io/buildah/stable
+  image: containers.torproject.org/tpo/tpa/base-images/podman:stable
   variables:
     STORAGE_DRIVER: vfs
     BUILDAH_FORMAT: docker
     FQ_IMAGE_NAME: "${DOCKER_REGISTRY_URL}/thetorproject/webtunnel-bridge"
   script:
-    - buildah build -t $FQ_IMAGE_NAME
+    - podman build -t $FQ_IMAGE_NAME .
     - mkdir -p container_image
-    - buildah push $FQ_IMAGE_NAME docker-archive:container_image/webtunnel-server.tar
+    - podman push $FQ_IMAGE_NAME docker-archive:container_image/webtunnel-server.tar
   artifacts:
     paths:
       - container_image/webtunnel-server.tar
