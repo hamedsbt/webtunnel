@@ -83,6 +83,7 @@ func main() {
 	pt.SmethodsDone()
 
 	sigChan := make(chan os.Signal, 1)
+	signal.Ignore(syscall.SIGURG)
 	signal.Notify(sigChan, syscall.SIGTERM)
 
 	if os.Getenv("TOR_PT_EXIT_ON_STDIN_CLOSE") == "1" {
