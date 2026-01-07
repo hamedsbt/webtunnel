@@ -1,0 +1,186 @@
+name: WebTunnel for Android
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write   # allow creating releases and uploading assets
+
+env:
+  NDK_ZIP_URL: https://dl.google.com/android/repository/android-ndk-r26d-linux.zip
+  NDK_DIRNAME: android-ndk-r26d
+  ANDROID_API_LEVEL: 30
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [386, amd64, armv7]
+      fail-fast: false
+
+    steps:
+      - name: Checkout this repo (needed for release job later)
+        uses: actions/checkout@v4
+
+      - name: Clone WebTunnel repository (source of version)
+        run: |
+          git clone --quiet https://gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/webtunnel.git
+
+      - name: Determine version from cloned WebTunnel tags
+        id: get_version
+        run: |
+          # fetch tags and pick latest semver-like tag if any
+          cd webtunnel
+          git fetch --tags --quiet
+          VERSION=$(git tag --sort=-v:refname | head -n1)
+          if [ -z "$VERSION" ]; then
+            # fallback to HEAD short sha if no tags present
+            VERSION="v0.0.0-$(git rev-parse --short HEAD)"
+          fi
+          echo "Determined VERSION=$VERSION"
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '^1.22'
+
+      - name: Install Android NDK
+        run: |
+          wget -q $NDK_ZIP_URL -O ndk.zip
+          unzip -q ndk.zip -d $HOME
+          echo "NDK_HOME=$HOME/${NDK_DIRNAME}" >> $GITHUB_ENV
+
+      - name: Prepare toolchain and build for ${{ matrix.arch }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Map matrix.arch to GOARCH, GOARM and clang triple
+          case "${{ matrix.arch }}" in
+            386)
+              export GOARCH=386
+              export CC_TRIPLE=i686-linux-android${ANDROID_API_LEVEL}-clang
+              export CXX_TRIPLE=i686-linux-android${ANDROID_API_LEVEL}-clang++
+              ARCH_NAME=386
+              ;;
+            amd64)
+              export GOARCH=amd64
+              export CC_TRIPLE=x86_64-linux-android${ANDROID_API_LEVEL}-clang
+              export CXX_TRIPLE=x86_64-linux-android${ANDROID_API_LEVEL}-clang++
+              ARCH_NAME=amd64
+              ;;
+            armv7)
+              export GOARCH=arm
+              export GOARM=7
+              export CC_TRIPLE=armv7a-linux-androideabi${ANDROID_API_LEVEL}-clang
+              export CXX_TRIPLE=armv7a-linux-androideabi${ANDROID_API_LEVEL}-clang++
+              ARCH_NAME=armv7
+              ;;
+            *)
+              echo "Unsupported arch: ${{ matrix.arch }}"
+              exit 1
+              ;;
+          esac
+
+          echo "Building for ARCH=${ARCH_NAME}, GOARCH=${GOARCH}, GOARM=${GOARM:-}"
+
+          # Expose NDK toolchain in PATH
+          TOOLCHAIN="$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64"
+          echo "PATH=$TOOLCHAIN/bin:$PATH" >> $GITHUB_ENV
+          export PATH="$TOOLCHAIN/bin:$PATH"
+
+          # Set compiler environment variables for CGO
+          export CC="$CC_TRIPLE"
+          export CXX="$CXX_TRIPLE"
+          export CGO_ENABLED=1
+          export GOOS=android
+          export GOARCH=${GOARCH}
+          # GOARM only set if non-empty
+          if [ -n "${GOARM:-}" ]; then
+            export GOARM=${GOARM}
+          fi
+
+          # Build the client binary
+          cd webtunnel/main/client
+          go build -ldflags="-s -w" -o webtunnel-client
+
+          # Verify binary was built
+          ls -lh webtunnel-client
+          file webtunnel-client || true
+
+          # Create tar named to your spec: webtunnel-android-<arch>-v<version>.tar
+          OUTNAME="webtunnel-android-${ARCH_NAME}-v${VERSION}.tar"
+          tar -cf "$OUTNAME" webtunnel-client
+          mv "$OUTNAME" "$GITHUB_WORKSPACE/"
+
+          echo "PACKAGED=$OUTNAME" >> $GITHUB_ENV
+
+      - name: Upload build artifact (tar)
+        uses: actions/upload-artifact@v4
+        with:
+          name: webtunnel-${{ matrix.arch }}
+          path: ${{ env.PACKAGED }}
+          retention-days: 10
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout this repo
+        uses: actions/checkout@v4
+
+      - name: Clone WebTunnel repo and determine version (again, single source of truth)
+        id: get_version_release
+        run: |
+          git clone --quiet https://gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/webtunnel.git
+          cd webtunnel
+          git fetch --tags --quiet
+          VERSION=$(git tag --sort=-v:refname | head -n1)
+          if [ -z "$VERSION" ]; then
+            VERSION="v0.0.0-$(git rev-parse --short HEAD)"
+          fi
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "VERSION=$VERSION"
+
+      - name: Download built artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Show downloaded artifacts
+        run: |
+          echo "Files in artifacts/"
+          ls -l artifacts || true
+
+      - name: Create GitHub Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ env.VERSION }}
+          release_name: ${{ env.VERSION }}
+          body: "Automated WebTunnel Android prebuilt binaries (arch: 386, amd64, armv7)."
+          draft: false
+          prerelease: true
+
+      - name: Upload release assets (tar files)
+        run: |
+          set -euo pipefail
+          UPLOAD_URL="${{ steps.create_release.outputs.upload_url }}"
+          # upload each .tar under artifacts/ using the upload_url
+          for f in artifacts/*.tar; do
+            [ -f "$f" ] || continue
+            fname=$(basename "$f")
+            echo "Uploading $fname to release ${{ env.VERSION }}"
+            curl -sS \
+              -X POST \
+              -H "Authorization: token $GITHUB_TOKEN" \
+              -H "Content-Type: application/x-tar" \
+              --data-binary @"$f" \
+              "${UPLOAD_URL}?name=${fname}"
+          done
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
