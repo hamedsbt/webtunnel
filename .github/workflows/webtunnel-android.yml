@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write   # allow creating releases and uploading assets
+  contents: write
 
 env:
   NDK_ZIP_URL: https://dl.google.com/android/repository/android-ndk-r26d-linux.zip
@@ -20,30 +20,20 @@ jobs:
       fail-fast: false
 
     steps:
-      - name: Checkout this repo (needed for release job later)
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Clone WebTunnel repository (source of version)
+      - name: Clone WebTunnel repository
         run: |
           git clone --quiet https://gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/webtunnel.git
 
       - name: Determine version
         run: |
-          git clone --quiet https://gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/webtunnel.git
           cd webtunnel
           git fetch --tags --quiet
-      
-          RAW_VERSION=$(git tag --sort=-v:refname | head -n1)
-      
-          # Strip leading 'v' if present
-          VERSION="${RAW_VERSION#v}"
-      
-          echo "RAW_VERSION=$RAW_VERSION" >> $GITHUB_ENV
+          VERSION=$(git tag --sort=-v:refname | head -n1 | sed 's/^v//')
           echo "VERSION=$VERSION" >> $GITHUB_ENV
 
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
+      - uses: actions/setup-go@v5
         with:
           go-version: '^1.22'
 
@@ -53,118 +43,86 @@ jobs:
           unzip -q ndk.zip -d $HOME
           echo "NDK_HOME=$HOME/${NDK_DIRNAME}" >> $GITHUB_ENV
 
-      - name: Prepare toolchain and build for ${{ matrix.arch }}
+      - name: Build for ${{ matrix.arch }}
         shell: bash
         run: |
           set -euo pipefail
 
-          # Map matrix.arch to GOARCH, GOARM and clang triple
           case "${{ matrix.arch }}" in
             386)
-              export GOARCH=386
-              export CC_TRIPLE=i686-linux-android${ANDROID_API_LEVEL}-clang
-              export CXX_TRIPLE=i686-linux-android${ANDROID_API_LEVEL}-clang++
+              GOARCH=386
+              CC=i686-linux-android${ANDROID_API_LEVEL}-clang
+              CXX=i686-linux-android${ANDROID_API_LEVEL}-clang++
               ARCH_NAME=386
               ;;
             amd64)
-              export GOARCH=amd64
-              export CC_TRIPLE=x86_64-linux-android${ANDROID_API_LEVEL}-clang
-              export CXX_TRIPLE=x86_64-linux-android${ANDROID_API_LEVEL}-clang++
+              GOARCH=amd64
+              CC=x86_64-linux-android${ANDROID_API_LEVEL}-clang
+              CXX=x86_64-linux-android${ANDROID_API_LEVEL}-clang++
               ARCH_NAME=amd64
               ;;
             armv7)
-              export GOARCH=arm
-              export GOARM=7
-              export CC_TRIPLE=armv7a-linux-androideabi${ANDROID_API_LEVEL}-clang
-              export CXX_TRIPLE=armv7a-linux-androideabi${ANDROID_API_LEVEL}-clang++
+              GOARCH=arm
+              GOARM=7
+              CC=armv7a-linux-androideabi${ANDROID_API_LEVEL}-clang
+              CXX=armv7a-linux-androideabi${ANDROID_API_LEVEL}-clang++
               ARCH_NAME=armv7
-              ;;
-            *)
-              echo "Unsupported arch: ${{ matrix.arch }}"
-              exit 1
               ;;
           esac
 
-          echo "Building for ARCH=${ARCH_NAME}, GOARCH=${GOARCH}, GOARM=${GOARM:-}"
-
-          # Expose NDK toolchain in PATH
           TOOLCHAIN="$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64"
-          echo "PATH=$TOOLCHAIN/bin:$PATH" >> $GITHUB_ENV
           export PATH="$TOOLCHAIN/bin:$PATH"
+          export CGO_ENABLED=1 GOOS=android GOARCH=$GOARCH GOARM=${GOARM:-}
+          export CC CXX
 
-          # Set compiler environment variables for CGO
-          export CC="$CC_TRIPLE"
-          export CXX="$CXX_TRIPLE"
-          export CGO_ENABLED=1
-          export GOOS=android
-          export GOARCH=${GOARCH}
-          # GOARM only set if non-empty
-          if [ -n "${GOARM:-}" ]; then
-            export GOARM=${GOARM}
-          fi
-
-          # Build the client binary
           cd webtunnel/main/client
           go build -ldflags="-s -w" -o webtunnel-client
 
-          # Verify binary was built
-          ls -lh webtunnel-client
-          file webtunnel-client || true
+          OUT="webtunnel-android-${ARCH_NAME}-v${VERSION}.tar"
+          tar -cf "$OUT" webtunnel-client
+          mv "$OUT" "$GITHUB_WORKSPACE/"
 
-          # Create tar named to your spec: webtunnel-android-<arch>-v<version>.tar
-          OUTNAME="webtunnel-android-${ARCH_NAME}-v${VERSION}.tar"
-          tar -cf "$OUTNAME" webtunnel-client
-          mv "$OUTNAME" "$GITHUB_WORKSPACE/"
+          echo "PACKAGED=$OUT" >> $GITHUB_ENV
 
-          echo "PACKAGED=$OUTNAME" >> $GITHUB_ENV
-
-      - name: Upload build artifact (tar)
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: webtunnel-${{ matrix.arch }}
           path: ${{ env.PACKAGED }}
-          retention-days: 10
 
   release:
     needs: build
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Clone WebTunnel repository
+        run: |
+          git clone --quiet https://gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/webtunnel.git
 
       - name: Determine version
         run: |
           cd webtunnel
           git fetch --tags --quiet
-      
           VERSION=$(git tag --sort=-v:refname | head -n1 | sed 's/^v//')
-      
           echo "VERSION=$VERSION" >> $GITHUB_ENV
-
 
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
 
-      - name: Show artifacts
-        run: find artifacts -type f
-
-      - name: Create tag if missing
+      - name: Create Git tag if missing
         run: |
           git fetch --tags
-          if ! git rev-parse "${VERSION}" >/dev/null 2>&1; then
-            git tag "${VERSION}"
-            git push origin "${VERSION}"
+          if ! git rev-parse "v${VERSION}" >/dev/null 2>&1; then
+            git tag "v${VERSION}"
+            git push origin "v${VERSION}"
           fi
 
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ env.VERSION }}
-          name: ${{ env.VERSION }}
+          tag_name: v${{ env.VERSION }}
+          name: v${{ env.VERSION }}
           prerelease: true
           files: artifacts/**/*.tar
-
-
