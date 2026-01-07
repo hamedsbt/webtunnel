@@ -136,20 +136,13 @@ jobs:
 
       - name: Determine version
         run: |
-          if [ ! -d webtunnel ]; then
-            git clone --quiet https://gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/webtunnel.git
-          fi
-      
           cd webtunnel
           git fetch --tags --quiet
       
-          RAW_VERSION=$(git tag --sort=-v:refname | head -n1)
+          VERSION=$(git tag --sort=-v:refname | head -n1 | sed 's/^v//')
       
-          # Strip leading 'v' if present
-          VERSION="${RAW_VERSION#v}"
-      
-          echo "RAW_VERSION=$RAW_VERSION" >> $GITHUB_ENV
           echo "VERSION=$VERSION" >> $GITHUB_ENV
+
 
       - uses: actions/download-artifact@v4
         with:
