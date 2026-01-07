@@ -1,7 +1,8 @@
 name: WebTunnel for Android
 
 on:
-  workflow_dispatch:
+  schedule:
+    - cron: "0 0 1,11,21 * *"
 
 permissions:
   contents: write
