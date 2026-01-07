@@ -27,19 +27,20 @@ jobs:
         run: |
           git clone --quiet https://gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/webtunnel.git
 
-      - name: Determine version from cloned WebTunnel tags
-        id: get_version
+      - name: Determine version
         run: |
-          # fetch tags and pick latest semver-like tag if any
+          git clone --quiet https://gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/webtunnel.git
           cd webtunnel
           git fetch --tags --quiet
-          VERSION=$(git tag --sort=-v:refname | head -n1)
-          if [ -z "$VERSION" ]; then
-            # fallback to HEAD short sha if no tags present
-            VERSION="v0.0.0-$(git rev-parse --short HEAD)"
-          fi
-          echo "Determined VERSION=$VERSION"
+      
+          RAW_VERSION=$(git tag --sort=-v:refname | head -n1)
+      
+          # Strip leading 'v' if present
+          VERSION="${RAW_VERSION#v}"
+      
+          echo "RAW_VERSION=$RAW_VERSION" >> $GITHUB_ENV
           echo "VERSION=$VERSION" >> $GITHUB_ENV
+
 
       - name: Set up Go
         uses: actions/setup-go@v5
