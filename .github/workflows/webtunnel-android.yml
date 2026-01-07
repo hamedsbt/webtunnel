@@ -131,31 +131,37 @@ jobs:
       contents: write
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Clone WebTunnel repo and determine version
+      - name: Determine version
         run: |
           git clone --quiet https://gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/webtunnel.git
           cd webtunnel
           git fetch --tags --quiet
           VERSION=$(git tag --sort=-v:refname | head -n1)
-          if [ -z "$VERSION" ]; then
-            VERSION="v0.0.0-$(git rev-parse --short HEAD)"
-          fi
           echo "VERSION=$VERSION" >> $GITHUB_ENV
 
-      - name: Download build artifacts
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
           path: artifacts
 
-      - name: Create GitHub Release and upload assets
+      - name: Show artifacts
+        run: find artifacts -type f
+
+      - name: Create tag if missing
+        run: |
+          git fetch --tags
+          if ! git rev-parse "${VERSION}" >/dev/null 2>&1; then
+            git tag "${VERSION}"
+            git push origin "${VERSION}"
+          fi
+
+      - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.VERSION }}
           name: ${{ env.VERSION }}
           prerelease: true
-          files: |
-            artifacts/*.tar
+          files: artifacts/**/*.tar
+
 
