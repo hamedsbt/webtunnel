@@ -127,12 +127,14 @@ jobs:
   release:
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
     steps:
-      - name: Checkout this repo
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Clone WebTunnel repo and determine version (again, single source of truth)
-        id: get_version_release
+      - name: Clone WebTunnel repo and determine version
         run: |
           git clone --quiet https://gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/webtunnel.git
           cd webtunnel
@@ -142,45 +144,18 @@ jobs:
             VERSION="v0.0.0-$(git rev-parse --short HEAD)"
           fi
           echo "VERSION=$VERSION" >> $GITHUB_ENV
-          echo "VERSION=$VERSION"
 
-      - name: Download built artifacts
+      - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
           path: artifacts
 
-      - name: Show downloaded artifacts
-        run: |
-          echo "Files in artifacts/"
-          ls -l artifacts || true
-
-      - name: Create GitHub Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Create GitHub Release and upload assets
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.VERSION }}
-          release_name: ${{ env.VERSION }}
-          body: "Automated WebTunnel Android prebuilt binaries (arch: 386, amd64, armv7)."
-          draft: false
+          name: ${{ env.VERSION }}
           prerelease: true
+          files: |
+            artifacts/*.tar
 
-      - name: Upload release assets (tar files)
-        run: |
-          set -euo pipefail
-          UPLOAD_URL="${{ steps.create_release.outputs.upload_url }}"
-          # upload each .tar under artifacts/ using the upload_url
-          for f in artifacts/*.tar; do
-            [ -f "$f" ] || continue
-            fname=$(basename "$f")
-            echo "Uploading $fname to release ${{ env.VERSION }}"
-            curl -sS \
-              -X POST \
-              -H "Authorization: token $GITHUB_TOKEN" \
-              -H "Content-Type: application/x-tar" \
-              --data-binary @"$f" \
-              "${UPLOAD_URL}?name=${fname}"
-          done
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
